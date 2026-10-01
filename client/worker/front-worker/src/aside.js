@@ -1,0 +1,75 @@
+class Aside extends HTMLElement {
+  constructor() {
+    super()
+    this.shadow = this.attachShadow({ mode: 'open' })
+  }
+
+  connectedCallback() {
+    this.render()
+    this.eventos()
+  }
+
+  render() {
+    this.shadow.innerHTML = /*html*/`
+      <style>
+        :host {
+          background-color: hsl(197, 95%, 59%);
+          display: flex;
+          flex-direction: column;
+          min-height: 100vh;
+        }
+
+        .menu {
+          display: block;
+        }
+
+        .registros {
+          display: block;
+        }
+
+        .mostrar-registros {
+          background-color: hsl(197, 95%, 59%);
+          cursor: pointer;
+          display: none;
+          padding: 0.7rem 1rem;
+        }
+      </style>
+
+      <div class="menu">
+        <slot name="menu"></slot>
+      </div>
+
+      <div class="registros">
+        <slot name="registros"></slot>
+      </div>
+
+      <div class="mostrar-registros">
+        <p>Mostrar registros</p>
+      </div>
+    `
+  }
+
+  eventos() {
+    const btnMostrarRegistros = this.shadow.querySelector('.mostrar-registros')
+
+    document.addEventListener('menu-cerrado', () => {
+      this.classList.add('ocultar-barra')
+    })
+
+    document.addEventListener('menu-abierto', () => {
+      this.classList.remove('ocultar-barra')
+    })
+
+    document.addEventListener('registros-cerrados', () => {
+      btnMostrarRegistros.style.display = 'block'
+    })
+
+    btnMostrarRegistros.addEventListener('click', () => {
+      const registros = this.querySelector('registros-component')
+      registros.classList.remove('ocultar-registros')
+      btnMostrarRegistros.style.display = 'none'
+    })
+  }
+}
+
+customElements.define('aside-component', Aside)
