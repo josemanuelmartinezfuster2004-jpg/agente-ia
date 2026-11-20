@@ -126,25 +126,45 @@ class ParteIa extends HTMLElement {
       </div>
 
       <div class="buscador">
-        <form action="/submit" method="post">
+        <form>
           <label for="name"></label>
-          <input type="text" id="name" name="name" placeholder="Escribe lo que quieras decir" required>
-          <input type="submit" value="Enviar">
+          <input type="text" id="name" name="prompt" placeholder="Escribe lo que quieras decir" required>
+          <input class="send-button" type="submit" value="Enviar">
         </form>
       </div>
     `
   }
 
   eventos() {
-    const botonMenuAbrir = this.shadow.querySelector('.boton-menu-abrir')
 
-    document.addEventListener('menu-cerrado', () => {
-      botonMenuAbrir.style.display = 'flex'
-    })
+    this.shadow.querySelector('.buscador').addEventListener('click', async (event) => {
+      // inicio codigo 30-10-26
+      event.preventDefault()
 
-    botonMenuAbrir.addEventListener('click', () => {
-      botonMenuAbrir.style.display = 'none'
-      document.dispatchEvent(new CustomEvent('menu-abierto'))
+      if (event.target.closest('.boton-enviar')) {
+        const form = this.shadow.querySelector('form')
+        const formData = new FormData(form)
+        const formDataJson = Object.fromEntries(formData.entries())
+
+        try {
+          const result = await fetch(`${import.meta.env.VITE_API_URL}/api/worker/chats`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formDataJson)
+          })
+
+          if (result.ok) {
+            form.reset()
+            const data = await result.json()
+            console.log(data.response)
+          }
+        } catch (error) {
+          console.log(error)
+        }
+
+      }
     })
   }
 }
