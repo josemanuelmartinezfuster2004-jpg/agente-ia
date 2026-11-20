@@ -1,3 +1,4 @@
+
 class ParteIa extends HTMLElement {
   constructor() {
     super()
@@ -54,6 +55,46 @@ class ParteIa extends HTMLElement {
           width: 100%;
         }
 
+        .mensajes {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          max-height: 55vh;
+          overflow-y: auto;
+          padding: 1rem 15%;
+        }
+
+        .mensaje {
+          border-radius: 0.8rem;
+          max-width: 80%;
+          padding: 1rem;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+        }
+
+        .mensaje p {
+          margin: 0;
+          line-height: 1.5;
+        }
+
+        .mensaje-usuario {
+          align-self: flex-end;
+          background-color: hsl(197, 95%, 59%);
+          color: hsl(0, 0%, 100%);
+        }
+
+        .mensaje-ia {
+          align-self: flex-start;
+          background-color: hsl(0, 0%, 100%);
+          color: hsl(0, 0%, 13%);
+        }
+
+        .mensaje-error {
+          align-self: flex-start;
+          background-color: hsl(0, 75%, 95%);
+          color: hsl(0, 65%, 35%);
+        }
+
         form {
           align-items: center;
           display: flex;
@@ -79,9 +120,18 @@ class ParteIa extends HTMLElement {
           width: auto;
         }
 
+        form input:disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+
         @media (max-width: 87.5rem) {
           form {
             padding: 2rem 8%;
+          }
+
+          .mensajes {
+            padding: 1rem 8%;
           }
         }
 
@@ -114,6 +164,14 @@ class ParteIa extends HTMLElement {
           form input + input {
             width: 100%;
           }
+
+          .mensajes {
+            padding: 1rem;
+          }
+
+          .mensaje {
+            max-width: 90%;
+          }
         }
       </style>
 
@@ -125,6 +183,8 @@ class ParteIa extends HTMLElement {
         <p>¿Cómo puedo ayudarte?</p>
       </div>
 
+      <div class="mensajes" aria-live="polite"></div>
+
       <div class="buscador">
         <form>
           <label for="name"></label>
@@ -135,35 +195,80 @@ class ParteIa extends HTMLElement {
     `
   }
 
-  eventos() {
+  agregarMensaje(texto, tipo) {
+    const mensajes = this.shadow.querySelector('.mensajes')
+    const mensaje = document.createElement('div')
+    const contenido = document.createElement('p')
 
-    this.shadow.querySelector('.buscador').addEventListener('click', async (event) => {
-      // inicio codigo 30-10-26
+    mensaje.classList.add('mensaje', `mensaje-${tipo}`)
+    contenido.textContent = texto
+
+    mensaje.appendChild(contenido)
+    mensajes.appendChild(mensaje)
+
+    mensajes.scrollTop = mensajes.scrollHeight
+
+    return mensaje
+  }
+
+  eventos() {
+    const form = this.shadow.querySelector('form')
+    const input = this.shadow.querySelector('#name')
+    const boton = this.shadow.querySelector('.send-button')
+
+    form.addEventListener('submit', async (event) => {
       event.preventDefault()
 
-      if (event.target.closest('.boton-enviar')) {
-        const form = this.shadow.querySelector('form')
-        const formData = new FormData(form)
-        const formDataJson = Object.fromEntries(formData.entries())
+      const userQuery = input.value.trim()
 
-        try {
-          const result = await fetch(`${import.meta.env.VITE_API_URL}/api/worker/chats`, {
+      if (!userQuery || boton.disabled) return
+
+      this.agregarMensaje(userQuery, 'usuario')
+      form.reset()
+
+      boton.disabled = true
+      boton.value = 'Enviando...'
+
+      const cargando = this.agregarMensaje('Pensando...', 'ia')
+
+      try {
+      const result = await fetch('/api/worker/messages', 
+          {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify(formDataJson)
-          })
-
-          if (result.ok) {
-            form.reset()
-            const data = await result.json()
-            console.log(data.response)
+            body: JSON.stringify({ userQuery })
           }
-        } catch (error) {
-          console.log(error)
+        )
+
+        const data = await result.json()
+
+        if (!result.ok) {
+          throw new Error(data.message || 'Error al obtener la respuesta')
         }
 
+        cargando.remove()
+
+        this.agregarMensaje(
+          data.answer || 'No se ha recibido ninguna respuesta.',
+          'ia'
+        )
+
+      } catch (error) {
+        cargando.remove()
+
+        this.agregarMensaje(
+          error.message || 'No se pudo conectar con el servidor.',
+          'error'
+        )
+
+        console.error(error)
+
+      } finally {
+        boton.disabled = false
+        boton.value = 'Enviar'
+        input.focus()
       }
     })
   }

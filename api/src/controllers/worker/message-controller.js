@@ -1,3 +1,4 @@
+
 const fs = require('fs/promises')
 const path = require('path')
 const VectorService = require(`${global.__basedir}/src/services/vector-service`)
@@ -52,7 +53,12 @@ exports.create = async (req, res, next) => {
 
     if (!candidates.length) {
       console.log('No se encontraron PDF candidatos.')
-      return
+
+      return res.status(200).send({
+        answer: 'No he encontrado documentos que contengan información para responder a tu pregunta.',
+        status: 'insufficient_information',
+        sources: []
+      })
     }
 
     const stats = await Promise.all(
