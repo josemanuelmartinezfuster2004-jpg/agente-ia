@@ -1,14 +1,14 @@
 const fs = require('fs/promises')
 const path = require('path')
+const { ObjectId } = require('mongodb')
 const MongodbService = require(`${global.__basedir}/src/services/mongodb-service`)
 const VectorService = require(`${global.__basedir}/src/services/vector-service`)
 const OpenAIService = require(`${global.__basedir}/src/services/openai-service`)
 const { answerGenerationSchema } = require(`${global.__basedir}/src/ia/schemas`)
-const { answerGenerationWithPdfsInstructions} = require(`${global.__basedir}/src/ia/instructions`)
+const { answerGenerationWithPdfsInstructions } = require(`${global.__basedir}/src/ia/instructions`)
 
 exports.create = async (req, res, next) => {
   try {
-
     const userQuery = req.body.userQuery
     const responseId = req.body.responseId
     const conversationId = req.body.conversationId
@@ -22,7 +22,11 @@ exports.create = async (req, res, next) => {
     })
 
     await vectorService.getCollection('publications')
-    const result = await vectorService.query({queryTexts: [userQuery], nResults: 10})
+
+    const result = await vectorService.query({
+      queryTexts: [userQuery],
+      nResults: 10
+    })
 
     const candidatesByPath = new Map()
 
@@ -55,7 +59,16 @@ exports.create = async (req, res, next) => {
     const candidates = [...candidatesByPath.values()]
 
     if (!candidates.length) {
-      res.status(200).send('No se encontraron PDF candidatos.')
+      const data = {
+        answer: 'No he encontrado documentos que contengan información para responder a tu pregunta.',
+        status: 'insufficient_information',
+        sources: []
+      }
+
+      if (responseId) data.responseId = responseId
+      if (conversationId) data.conversationId = conversationId
+
+      res.status(200).send(data)
       return
     }
 
@@ -109,7 +122,7 @@ exports.create = async (req, res, next) => {
 
     const openAIService = new OpenAIService()
 
-    if(responseId){
+    if (responseId) {
       openAIService.setResponseId(responseId)
     }
 
@@ -120,7 +133,7 @@ exports.create = async (req, res, next) => {
         reasoning: {
           effort: 'low'
         },
-        store: true, 
+        store: true,
         instructions: answerGenerationWithPdfsInstructions,
         prompt_cache_key: 'answer-generation-v1',
         text: {
@@ -134,46 +147,71 @@ exports.create = async (req, res, next) => {
       }
     })
 
-    const mongodbService = new MongodbService({
-      uri: process.env.MONGODB_URI,
-      dbName: process.env.MONGODB_DB
-    })
+    let currentConversationId = conversationId || null
+    let mongodbService = null
 
-    let currentConversationId = null
-
-    if (conversationId) {
-
-      currentConversationId = mongodbService.createId(conversationId)
-
-      const result = await mongodbService.updateOne('conversations', {
-        _id: currentConversationId
-      }, {
-        $push: { messages: { ...response, userQuery } },
-        $set: { updatedAt: new Date() }
+    try {
+      mongodbService = new MongodbService({
+        uri: process.env.MONGODB_URI,
+        dbName: process.env.MONGODB_WEB_DB || process.env.MONGODB_DB
       })
 
-      if (!result.matchedCount) {
-        throw new Error('Conversation not found')
+      if (conversationId) {
+        const mongoConversationId = mongodbService.createId(conversationId)
+
+        const updateResult = await mongodbService.updateOne(
+          'conversations',
+          { _id: mongoConversationId },
+          {
+            $push: {
+              messages: { ...response, userQuery }
+            },
+            $set: { updatedAt: new Date() }
+          }
+        )
+
+        if (!updateResult.matchedCount) {
+          throw new Error('Conversation not found in MongoDB')
+        }
+
+        currentConversationId = mongoConversationId.toString()
+      } else {
+        const conversation = await mongodbService.insertOne(
+          'conversations',
+          {
+            messages: [{ ...response, userQuery }],
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }
+        )
+
+        currentConversationId = conversation.insertedId.toString()
       }
+    } catch (mongoError) {
+      console.warn(
+        'No se pudo guardar la conversación en MongoDB:',
+        mongoError.message
+      )
 
-    } else {
-
-      const conversation = await mongodbService.insertOne('conversations', {
-        messages: [ {...response, userQuery} ],
-        createdAt: new Date(),
-        updatedAt: new Date()
-      })
-
-      currentConversationId = conversation.insertedId
+      if (!currentConversationId) {
+        currentConversationId = new ObjectId().toString()
+      }
+    } finally {
+      if (mongodbService) {
+        await mongodbService.close().catch(closeError => {
+          console.warn(
+            'No se pudo cerrar MongoDB:',
+            closeError.message
+          )
+        })
+      }
     }
 
-    const data = {
+    res.status(200).send({
       ...JSON.parse(response.output_text),
       responseId: response.id,
-      conversationId: currentConversationId.toString()
-    }
-
-    res.status(200).send(data)
+      conversationId: currentConversationId
+    })
   } catch (err) {
     next(err)
   }
