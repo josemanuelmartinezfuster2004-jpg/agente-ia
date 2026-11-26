@@ -15,8 +15,12 @@ class ParteIa extends HTMLElement {
       <style>
         :host {
           background-image: url('../imagenes/ia.jpg');
+          background-position: center;
           background-size: cover;
-          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
           overflow: hidden;
           position: relative;
         }
@@ -40,9 +44,9 @@ class ParteIa extends HTMLElement {
           align-items: center;
           background-color: hsl(0 0% 100% / 0.4);
           display: flex;
+          flex: 0 0 auto;
           justify-content: center;
-          margin-top: 15rem;
-          padding: 0 2rem;
+          padding: 1.5rem 2rem;
           text-align: center;
         }
 
@@ -51,16 +55,15 @@ class ParteIa extends HTMLElement {
           font-size: 2rem;
         }
 
-        .buscador {
-          width: 100%;
-        }
-
         .mensajes {
           display: flex;
+          flex: 1;
           flex-direction: column;
           gap: 1rem;
-          max-height: 55vh;
+          min-height: 0;
+          overflow-x: hidden;
           overflow-y: auto;
+          overscroll-behavior: contain;
           padding: 1rem 15%;
         }
 
@@ -95,12 +98,18 @@ class ParteIa extends HTMLElement {
           color: hsl(0, 65%, 35%);
         }
 
+        .buscador {
+          flex: 0 0 auto;
+          width: 100%;
+        }
+
         form {
           align-items: center;
           display: flex;
           gap: 0.7rem;
           justify-content: center;
-          padding: 2rem 15%;
+          margin: 0;
+          padding: 1rem 15%;
         }
 
         form input {
@@ -108,6 +117,7 @@ class ParteIa extends HTMLElement {
           border: 0.13rem solid hsl(0, 0%, 73%);
           border-radius: 0.7rem;
           font-size: 1rem;
+          min-width: 0;
           padding: 1rem;
           width: 100%;
         }
@@ -127,7 +137,7 @@ class ParteIa extends HTMLElement {
 
         @media (max-width: 87.5rem) {
           form {
-            padding: 2rem 8%;
+            padding: 1rem 8%;
           }
 
           .mensajes {
@@ -137,18 +147,17 @@ class ParteIa extends HTMLElement {
 
         @media (max-width: 56.25rem) {
           .texto-ia {
-            margin-top: 8rem;
+            padding: 1.5rem;
           }
 
           form {
-            padding: 2rem;
+            padding: 1rem 2rem;
           }
         }
 
         @media (max-width: 40.63rem) {
           .texto-ia {
-            margin-top: 5rem;
-            padding: 0 1rem;
+            padding: 1rem;
           }
 
           .texto-ia p {
@@ -232,15 +241,13 @@ class ParteIa extends HTMLElement {
       const cargando = this.agregarMensaje('Pensando...', 'ia')
 
       try {
-      const result = await fetch('/api/worker/messages', 
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ userQuery })
-          }
-        )
+        const result = await fetch('/api/worker/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ userQuery })
+        })
 
         const data = await result.json()
 

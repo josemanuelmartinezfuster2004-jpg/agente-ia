@@ -1,3 +1,4 @@
+
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
 
 * {
@@ -10,6 +11,7 @@ body {
   font-family: 'Roboto', sans-serif;
   height: 100%;
   margin: 0;
+  overflow: hidden;
   padding: 0;
   width: 100%;
 }
@@ -27,8 +29,16 @@ h6 {
 main {
   display: grid;
   grid-template-columns: 20% 80%;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   width: 100%;
+}
+
+aside-component {
+  min-height: 0;
+  overflow: hidden;
 }
 
 aside-component.ocultar-barra {
