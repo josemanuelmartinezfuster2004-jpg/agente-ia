@@ -1,8 +1,9 @@
-
 class ParteIa extends HTMLElement {
   constructor() {
     super()
     this.shadow = this.attachShadow({ mode: 'open' })
+    this.responseId = null
+    this.conversationId = null
   }
 
   connectedCallback() {
@@ -272,7 +273,15 @@ class ParteIa extends HTMLElement {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ userQuery })
+          body: JSON.stringify({
+            userQuery,
+            ...(this.responseId && {
+              responseId: this.responseId
+            }),
+            ...(this.conversationId && {
+              conversationId: this.conversationId
+            })
+          })
         })
 
         const data = await result.json()
@@ -281,13 +290,20 @@ class ParteIa extends HTMLElement {
           throw new Error(data.message || 'Error al obtener la respuesta')
         }
 
+        if (data.responseId) {
+          this.responseId = data.responseId
+        }
+
+        if (data.conversationId) {
+          this.conversationId = data.conversationId
+        }
+
         cargando.remove()
 
         this.agregarMensaje(
           data.answer || 'No se ha recibido ninguna respuesta.',
           'ia'
         )
-
       } catch (error) {
         cargando.remove()
 
@@ -297,7 +313,6 @@ class ParteIa extends HTMLElement {
         )
 
         console.error(error)
-
       } finally {
         boton.disabled = false
         boton.value = 'Enviar'
