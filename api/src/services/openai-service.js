@@ -16,6 +16,10 @@ module.exports = class OpenAIService {
     this.tools = []
   }
 
+  setResponseId (responseId) {
+    this.responseId = responseId
+  }
+
   async createResponse ({input, model, options = {}}) {
     this.answer = null
     this.tools = []
