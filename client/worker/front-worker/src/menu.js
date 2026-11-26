@@ -13,23 +13,26 @@ class Menu extends HTMLElement {
     this.shadow.innerHTML = /*html*/`
       <style>
         :host {
-          background-color: hsl(197, 95%, 59%);
+          background-color: hsl(225, 25%, 6%);
+          color: hsl(48, 100%, 98%);
           display: block;
         }
 
         .arriba {
           align-items: center;
-          background-color: hsl(0, 0%, 80%);
+          background-color: hsl(225, 25%, 8%);
+          border-bottom: 1px solid hsl(48, 30%, 88%);
           display: flex;
           justify-content: space-between;
           padding: 1rem;
         }
 
         .nombre-ia p {
+          border: 1px solid hsl(48, 30%, 88%);
+          border-radius: 0.4rem;
           font-size: 1.5rem;
           font-weight: 700;
           padding: 0 0.5rem;
-          border: solid 1px hsla(0, 0%, 0%, 1.00);
         }
 
         .opciones {
@@ -40,23 +43,45 @@ class Menu extends HTMLElement {
         .buscar,
         .cerrar-barra {
           align-items: center;
+          background-color: hsl(225, 75%, 18%);
+          border: 1px solid hsl(215, 100%, 75%);
+          border-radius: 0.5rem;
           cursor: pointer;
           display: flex;
           justify-content: center;
           padding: 0.5rem;
+          transition: background-color 0.2s, box-shadow 0.2s;
+        }
+
+        .buscar:hover,
+        .cerrar-barra:hover {
+          background-color: hsl(215, 85%, 28%);
+          box-shadow: 0 0 0.6rem hsl(215, 100%, 65% / 0.5);
         }
 
         .buscar svg,
         .cerrar-barra svg {
+          fill: hsl(48, 100%, 98%);
           height: 1.5rem;
           width: 1.5rem;
         }
 
         .nuevo-chat {
           align-items: center;
+          background-color: hsl(225, 75%, 18%);
+          border: 1px solid hsl(215, 100%, 75%);
+          border-radius: 0.5rem;
+          color: hsl(48, 100%, 98%);
           cursor: pointer;
           display: flex;
+          margin: 1rem;
           padding: 1rem;
+          transition: background-color 0.2s, box-shadow 0.2s;
+        }
+
+        .nuevo-chat:hover {
+          background-color: hsl(215, 85%, 28%);
+          box-shadow: 0 0 0.7rem hsl(215, 100%, 65% / 0.4);
         }
 
         .nuevo-chat p {
@@ -65,8 +90,10 @@ class Menu extends HTMLElement {
 
         footer {
           align-items: center;
-          background-color: hsl(0, 0%, 80%);
+          background-color: hsl(225, 25%, 8%);
+          border-top: 1px solid hsl(48, 30%, 88%);
           bottom: 0;
+          color: hsl(48, 100%, 98%);
           display: flex;
           gap: 1rem;
           justify-content: space-between;
@@ -83,8 +110,10 @@ class Menu extends HTMLElement {
 
         .iniciales {
           align-items: center;
-          background-color: hsl(0, 0%, 100%);
+          background-color: hsl(225, 75%, 18%);
+          border: 1px solid hsl(215, 100%, 80%);
           border-radius: 50%;
+          color: hsl(48, 100%, 98%);
           display: flex;
           height: 2.5rem;
           justify-content: center;
@@ -96,6 +125,7 @@ class Menu extends HTMLElement {
         }
 
         .gratis p {
+          color: hsl(215, 100%, 80%);
           font-size: 0.8rem;
         }
 

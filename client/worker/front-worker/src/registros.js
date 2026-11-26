@@ -32,7 +32,8 @@ class Registros extends HTMLElement {
     this.shadow.innerHTML = /*html*/`
       <style>
         :host {
-          background-color: hsl(197, 95%, 59%);
+          background-color: hsl(225, 25%, 6%);
+          color: hsl(48, 100%, 98%);
           display: block;
         }
 
@@ -59,6 +60,7 @@ class Registros extends HTMLElement {
 
         .caja-chats {
           align-items: center;
+          border-bottom: 1px solid hsl(48, 30%, 88%);
           display: grid;
           grid-template-columns: 1fr auto;
           width: 100%;
@@ -70,6 +72,7 @@ class Registros extends HTMLElement {
         }
 
         .iconos-chats {
+          color: hsl(215, 100%, 80%);
           font-size: 1.2rem;
           padding: 0.8rem;
         }
@@ -82,16 +85,35 @@ class Registros extends HTMLElement {
         }
 
         .chat {
+          background-color: hsl(225, 75%, 15%);
+          border: 1px solid hsl(225, 35%, 28%);
+          border-radius: 0.4rem;
+          color: hsl(48, 100%, 98%);
           cursor: pointer;
           font-size: 1rem;
           height: 3rem;
           overflow: hidden;
           padding: 0.7rem;
+          transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .chat:hover {
+          background-color: hsl(215, 85%, 25%);
+          border-color: hsl(215, 100%, 80%);
+          box-shadow: 0 0 0.5rem hsl(215, 100%, 65% / 0.3);
         }
 
         .cerrar-registros {
+          border: 1px solid hsl(48, 30%, 88%);
+          border-radius: 0.4rem;
+          color: hsl(48, 100%, 98%);
           cursor: pointer;
+          margin-top: 0.5rem;
           padding: 0.8rem;
+        }
+
+        .cerrar-registros:hover {
+          background-color: hsl(225, 75%, 18%);
         }
 
         @media (max-width: 87.5rem) {

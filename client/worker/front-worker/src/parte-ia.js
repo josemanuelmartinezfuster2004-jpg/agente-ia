@@ -27,17 +27,30 @@ class ParteIa extends HTMLElement {
 
         .boton-menu-abrir {
           align-items: center;
-          background-color: hsl(197, 95%, 59%);
+          background-color: hsl(225, 85%, 22%);
+          border: 1px solid hsl(215, 100%, 80%);
           border-radius: 0.5rem;
-          color: hsl(0, 0%, 100%);
+          box-shadow: 0 0 0.7rem hsl(215, 100%, 65% / 0.4);
+          color: hsl(48, 100%, 98%);
           cursor: pointer;
           display: none;
-          font-size: 1.2rem;
-          height: 100%;
+          font-size: 1.5rem;
+          height: 2.8rem;
           justify-content: center;
-          padding: 0.5rem;
+          left: 1rem;
           position: absolute;
-          width: fit-content;
+          top: 1rem;
+          width: 2.8rem;
+          z-index: 10;
+        }
+
+        .boton-menu-abrir.visible {
+          display: flex;
+        }
+
+        .boton-menu-abrir:hover {
+          background-color: hsl(215, 85%, 32%);
+          box-shadow: 0 0 1rem hsl(215, 100%, 65% / 0.7);
         }
 
         .texto-ia {
@@ -184,9 +197,9 @@ class ParteIa extends HTMLElement {
         }
       </style>
 
-      <div class="boton-menu-abrir">
-        <p>&gt;</p>
-      </div>
+      <button class="boton-menu-abrir" type="button" aria-label="Abrir menú">
+        &gt;
+      </button>
 
       <div class="texto-ia">
         <p>¿Cómo puedo ayudarte?</p>
@@ -224,6 +237,19 @@ class ParteIa extends HTMLElement {
     const form = this.shadow.querySelector('form')
     const input = this.shadow.querySelector('#name')
     const boton = this.shadow.querySelector('.send-button')
+    const botonMenuAbrir = this.shadow.querySelector('.boton-menu-abrir')
+
+    document.addEventListener('menu-cerrado', () => {
+      botonMenuAbrir.classList.add('visible')
+    })
+
+    document.addEventListener('menu-abierto', () => {
+      botonMenuAbrir.classList.remove('visible')
+    })
+
+    botonMenuAbrir.addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('menu-abierto'))
+    })
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault()
