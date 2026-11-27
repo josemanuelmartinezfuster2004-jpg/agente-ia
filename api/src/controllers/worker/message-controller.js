@@ -6,55 +6,6 @@ const OpenAIService = require(`${global.__basedir}/src/services/openai-service`)
 const { answerGenerationSchema } = require(`${global.__basedir}/src/ia/schemas`)
 const { answerGenerationWithPdfsInstructions } = require(`${global.__basedir}/src/ia/instructions`)
 
-async function saveConversationMessage(conversationId, message) {
-  const mongodbService = new MongodbService({
-    uri: process.env.MONGODB_URI,
-    dbName: process.env.MONGODB_WEB_DB || process.env.MONGODB_DB
-  })
-
-  try {
-    const now = new Date()
-
-    if (conversationId) {
-      const mongoConversationId = mongodbService.createId(conversationId)
-
-      const updateResult = await mongodbService.updateOne(
-        'conversations',
-        { _id: mongoConversationId },
-        {
-          $push: {
-            messages: message
-          },
-          $set: {
-            updatedAt: now
-          }
-        }
-      )
-
-      if (!updateResult.matchedCount) {
-        throw new Error('No se ha encontrado la conversación en MongoDB.')
-      }
-
-      return mongoConversationId.toString()
-    }
-
-    const conversation = await mongodbService.insertOne(
-      'conversations',
-      {
-        messages: [message],
-        createdAt: now,
-        updatedAt: now
-      }
-    )
-
-    return conversation.insertedId.toString()
-  } finally {
-    await mongodbService.close().catch(error => {
-      console.warn('No se pudo cerrar MongoDB:', error.message)
-    })
-  }
-}
-
 exports.create = async (req, res, next) => {
   try {
     const userQuery = req.body.userQuery
@@ -233,5 +184,55 @@ exports.create = async (req, res, next) => {
     })
   } catch (error) {
     next(error)
+  }
+}
+
+async function saveConversationMessage(conversationId, message) {
+  const mongodbService = new MongodbService({
+    uri: process.env.MONGODB_URI,
+    dbName: process.env.MONGODB_WEB_DB || process.env.MONGODB_DB
+  })
+
+  try {
+    const now = new Date()
+
+    if (conversationId) {
+      const mongoConversationId = mongodbService.createId(conversationId)
+
+      const updateResult = await mongodbService.updateOne(
+        'conversations',
+        { _id: mongoConversationId },
+        {
+          $push: {
+            messages: message
+          },
+          $set: {
+            updatedAt: now
+          }
+        }
+      )
+
+      if (!updateResult.matchedCount) {
+        throw new Error('No se ha encontrado la conversación en MongoDB.')
+      }
+
+      return mongoConversationId.toString()
+    }
+
+    const conversation = await mongodbService.insertOne(
+      'conversations',
+      {
+        summary: 
+        messages: [message],
+        createdAt: now,
+        updatedAt: now
+      }
+    )
+
+    return conversation.insertedId.toString()
+  } finally {
+    await mongodbService.close().catch(error => {
+      console.warn('No se pudo cerrar MongoDB:', error.message)
+    })
   }
 }

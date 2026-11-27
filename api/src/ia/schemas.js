@@ -83,6 +83,9 @@ const segmentationSchema = {
 const answerGenerationSchema = {
   type: 'object',
   properties: {
+    summary: {
+      type: 'string',
+     description: 'A concise summary of the user request containing between 3 and 5 words. Capture the main topic or intent in the same language as the user query. Do not summarize the generated answer.'    },
     answer: {
       type: 'string',
       description: 'Answer to the user question, grounded in retrieved documents.'
@@ -124,7 +127,7 @@ const answerGenerationSchema = {
       }
     }
   },
-  required: ['answer', 'status', 'sources'],
+  required: ['summary', 'answer', 'status', 'sources'],
   additionalProperties: false
 }
 
