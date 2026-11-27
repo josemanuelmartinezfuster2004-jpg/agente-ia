@@ -4,36 +4,9 @@ const path = require('path')
 const MongodbService = require(`${global.__basedir}/src/services/mongodb-service`)
 const VectorService = require(`${global.__basedir}/src/services/vector-service`)
 const OpenAIService = require(`${global.__basedir}/src/services/openai-service`)
+const generateConversationSummary = require(`${global.__basedir}/src/services/conversation-summary-service`)
 const { answerGenerationSchema } = require(`${global.__basedir}/src/ia/schemas`)
 const { answerGenerationWithPdfsInstructions } = require(`${global.__basedir}/src/ia/instructions`)
-
-const conversationSummarySchema = {
-  type: 'object',
-  properties: {
-    summary: {
-      type: 'string',
-      description: 'Create a concise conversation title of 3 to 5 words. Use the same language as the user. Describe the main topic or intent, not the answer. Do not include introductory phrases.'
-    }
-  },
-  required: ['summary'],
-  additionalProperties: false
-}
-
-const conversationSummaryInstructions = `
-You generate short, descriptive titles for conversations.
-
-Read the user's original message and identify its main topic or intent.
-
-Rules:
-- Write a title containing between 3 and 5 words.
-- Use the same language as the user's message.
-- Capture the actual topic or request.
-- Do not summarize an answer.
-- Do not include introductory phrases.
-- Do not use generic titles such as "Nueva conversación".
-- Do not remove meaningful words just because they are verbs or prepositions.
-- Return only the JSON required by the supplied schema.
-`
 
 exports.create = async (req, res, next) => {
   try {
@@ -100,38 +73,6 @@ exports.create = async (req, res, next) => {
         answer: 'No he encontrado documentos que contengan información para responder a tu pregunta.',
         status: 'insufficient_information',
         sources: []
-      }
-
-      if (!conversationId) {
-        const openAIService = new OpenAIService()
-
-        const summaryResponse = await openAIService.createResponse({
-          input: [{
-            role: 'user',
-            content: [{
-              type: 'input_text',
-              text: userQuery
-            }]
-          }],
-          model: 'gpt-6-luna',
-          options: {
-            reasoning: {
-              effort: 'low'
-            },
-            store: false,
-            instructions: conversationSummaryInstructions,
-            text: {
-              format: {
-                type: 'json_schema',
-                name: 'conversation-summary',
-                strict: true,
-                schema: conversationSummarySchema
-              }
-            }
-          }
-        })
-
-        data.summary = JSON.parse(summaryResponse.output_text).summary
       }
     } else {
       const stats = await Promise.all(
@@ -221,8 +162,7 @@ Include the summary field required by the JSON schema.`,
       currentResponseId = response.id
     }
 
-    const summary = data.summary || null
-    const { summary: ignoredSummary, ...messageData } = data
+    const { summary, ...messageData } = data
 
     const currentConversationId = await saveConversationMessage(
       conversationId,
@@ -258,6 +198,15 @@ async function saveConversationMessage(conversationId, summary, message) {
     if (conversationId) {
       const mongoConversationId = mongodbService.createId(conversationId)
 
+      const conversation = await mongodbService.getFirst(
+        'conversations',
+        { _id: mongoConversationId }
+      )
+
+      if (!conversation) {
+        throw new Error('No se ha encontrado la conversación en MongoDB.')
+      }
+
       const updateResult = await mongodbService.updateOne(
         'conversations',
         { _id: mongoConversationId },
@@ -275,17 +224,51 @@ async function saveConversationMessage(conversationId, summary, message) {
         throw new Error('No se ha encontrado la conversación en MongoDB.')
       }
 
+      if (!conversation.summary?.trim()) {
+        try {
+          const generatedSummary = await generateConversationSummary([
+            ...(conversation.messages || []),
+            message
+          ])
+
+          await mongodbService.updateOne(
+            'conversations',
+            {
+              _id: mongoConversationId,
+              $or: [
+                { summary: { $exists: false } },
+                { summary: null },
+                { summary: '' }
+              ]
+            },
+            {
+              $set: {
+                summary: generatedSummary
+              }
+            }
+          )
+        } catch (error) {
+          console.warn('No se pudo generar el título de la conversación:', error.message)
+        }
+      }
+
       return mongoConversationId.toString()
     }
 
-    if (!summary) {
-      throw new Error('OpenAI no ha generado el título de la conversación.')
+    let conversationSummary = summary
+
+    if (!conversationSummary) {
+      try {
+        conversationSummary = await generateConversationSummary([message])
+      } catch (error) {
+        console.warn('No se pudo generar el título de la conversación:', error.message)
+      }
     }
 
     const conversation = await mongodbService.insertOne(
       'conversations',
       {
-        summary,
+        ...(conversationSummary && { summary: conversationSummary }),
         messages: [message],
         createdAt: now,
         updatedAt: now

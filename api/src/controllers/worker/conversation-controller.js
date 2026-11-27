@@ -1,6 +1,7 @@
 
 const { ObjectId } = require('mongodb')
 const MongodbService = require(`${global.__basedir}/src/services/mongodb-service`)
+const generateConversationSummary = require(`${global.__basedir}/src/services/conversation-summary-service`)
 
 exports.findAll = async (req, res, next) => {
   const mongodbService = new MongodbService({
@@ -11,20 +12,24 @@ exports.findAll = async (req, res, next) => {
   try {
     const conversations = await mongodbService.getCollection('conversations')
 
-    const result = conversations
-      .sort((a, b) => {
-        const dateA = new Date(a.updatedAt || a.createdAt || 0)
-        const dateB = new Date(b.updatedAt || b.createdAt || 0)
+    conversations.sort((a, b) => {
+      const dateA = new Date(a.updatedAt || a.createdAt || 0)
+      const dateB = new Date(b.updatedAt || b.createdAt || 0)
 
-        return dateB - dateA
-      })
-      .map(conversation => ({
-        conversationId: conversation._id.toString(),
-        title: conversation.summary || 'Nueva conversación',
-        messageCount: conversation.messages?.length || 0,
-        createdAt: conversation.createdAt || null,
-        updatedAt: conversation.updatedAt || conversation.createdAt || null
-      }))
+      return dateB - dateA
+    })
+
+    for (const conversation of conversations) {
+      await ensureConversationSummary(mongodbService, conversation)
+    }
+
+    const result = conversations.map(conversation => ({
+      conversationId: conversation._id.toString(),
+      title: conversation.summary || 'Nueva conversación',
+      messageCount: conversation.messages?.length || 0,
+      createdAt: conversation.createdAt || null,
+      updatedAt: conversation.updatedAt || conversation.createdAt || null
+    }))
 
     res.status(200).send(result)
   } catch (error) {
@@ -64,6 +69,8 @@ exports.findById = async (req, res, next) => {
       return
     }
 
+    await ensureConversationSummary(mongodbService, conversation)
+
     const messages = (conversation.messages || []).map(parseMessage)
 
     res.status(200).send({
@@ -80,6 +87,51 @@ exports.findById = async (req, res, next) => {
     await mongodbService.close().catch(error => {
       console.warn('No se pudo cerrar MongoDB:', error.message)
     })
+  }
+}
+
+async function ensureConversationSummary(mongodbService, conversation) {
+  if (conversation.summary?.trim()) return
+  if (!conversation.messages?.length) return
+
+  try {
+    const summary = await generateConversationSummary(conversation.messages)
+
+    const updateResult = await mongodbService.updateOne(
+      'conversations',
+      {
+        _id: conversation._id,
+        $or: [
+          { summary: { $exists: false } },
+          { summary: null },
+          { summary: '' }
+        ]
+      },
+      {
+        $set: {
+          summary
+        }
+      }
+    )
+
+    if (updateResult.modifiedCount) {
+      conversation.summary = summary
+      return
+    }
+
+    const updatedConversation = await mongodbService.getFirst(
+      'conversations',
+      { _id: conversation._id }
+    )
+
+    if (updatedConversation?.summary) {
+      conversation.summary = updatedConversation.summary
+    }
+  } catch (error) {
+    console.warn(
+      `No se pudo generar el título de la conversación ${conversation._id}:`,
+      error.message
+    )
   }
 }
 
