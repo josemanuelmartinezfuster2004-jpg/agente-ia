@@ -1,3 +1,4 @@
+
 {
   "name": "api",
   "version": "1.0.0",
@@ -10,8 +11,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node --env-file=.env index.js",
     "dev": "node --env-file=.env --watch index.js",
-    "import-with-openai": "node --env-file=.env ./src/scripts/imports/import-with-openai.js",
-    "import-with-vastai": "node --env-file=.env ./src/scripts/imports/import-with-vastai.js"
+    "import-with-openai": "node --env-file=.env ./src/scripts/imports/import-with-openai.js"
   },
   "dependencies": {
     "@chroma-core/openai": "^0.1.10",
