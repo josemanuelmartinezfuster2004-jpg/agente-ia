@@ -1,3 +1,4 @@
+
 class Registros extends HTMLElement {
   constructor() {
     super()
@@ -21,32 +22,17 @@ class Registros extends HTMLElement {
           display: block;
         }
 
-        :host(.ocultar-registros) {
-          display: none;
-        }
-
         .acordeon-chats {
-          align-items: center;
           display: flex;
           flex-direction: column;
           padding: 0 1rem;
         }
 
-        .acordeon-chats details {
-          width: 100%;
-        }
-
-        .acordeon-chats summary {
-          align-items: center;
-          cursor: pointer;
-          display: flex;
-        }
-
         .caja-chats {
           align-items: center;
           border-bottom: 1px solid hsl(48, 30%, 88%);
-          display: grid;
-          grid-template-columns: 1fr auto;
+          display: flex;
+          justify-content: space-between;
           width: 100%;
         }
 
@@ -55,10 +41,27 @@ class Registros extends HTMLElement {
           padding: 0.8rem;
         }
 
-        .iconos-chats {
+        .texto-chats p {
+          margin: 0;
+        }
+
+        .nuevo-chat {
+          align-items: center;
+          background-color: transparent;
+          border: 1px solid hsl(215, 100%, 80%);
+          border-radius: 0.4rem;
           color: hsl(215, 100%, 80%);
-          font-size: 1.2rem;
-          padding: 0.8rem;
+          cursor: pointer;
+          display: flex;
+          font-size: 1.4rem;
+          height: 2.5rem;
+          justify-content: center;
+          width: 2.5rem;
+        }
+
+        .nuevo-chat:hover {
+          background-color: hsl(215, 85%, 25%);
+          color: hsl(48, 100%, 98%);
         }
 
         .desplegable {
@@ -98,22 +101,8 @@ class Registros extends HTMLElement {
           padding: 0.8rem;
         }
 
-        .cerrar-registros {
-          border: 1px solid hsl(48, 30%, 88%);
-          border-radius: 0.4rem;
-          color: hsl(48, 100%, 98%);
-          cursor: pointer;
-          margin-top: 0.5rem;
-          padding: 0.8rem;
-        }
-
-        .cerrar-registros:hover {
-          background-color: hsl(225, 75%, 18%);
-        }
-
         @media (max-width: 87.5rem) {
-          .texto-chats,
-          .iconos-chats {
+          .texto-chats {
             font-size: 1rem;
           }
 
@@ -123,9 +112,7 @@ class Registros extends HTMLElement {
         }
 
         @media (max-width: 40.63rem) {
-          .texto-chats,
-          .iconos-chats,
-          .cerrar-registros {
+          .texto-chats {
             padding: 0.5rem;
           }
 
@@ -140,26 +127,23 @@ class Registros extends HTMLElement {
       </style>
 
       <div class="acordeon-chats">
-        <details open>
-          <summary>
-            <div class="caja-chats">
-              <div class="texto-chats">
-                <p>Recientes</p>
-              </div>
-
-              <div class="iconos-chats">
-                <p>+</p>
-              </div>
-            </div>
-          </summary>
-
-          <div class="desplegable">
-            <p class="sin-conversaciones">Cargando conversaciones...</p>
+        <div class="caja-chats">
+          <div class="texto-chats">
+            <p>Recientes</p>
           </div>
-        </details>
 
-        <div class="cerrar-registros">
-          <p>X</p>
+          <button
+            class="nuevo-chat"
+            type="button"
+            aria-label="Crear nueva conversación"
+            title="Nueva conversación"
+          >
+            +
+          </button>
+        </div>
+
+        <div class="desplegable">
+          <p class="sin-conversaciones">Cargando conversaciones...</p>
         </div>
       </div>
     `
@@ -221,8 +205,12 @@ class Registros extends HTMLElement {
   }
 
   eventos() {
-    const btnCerrarRegistros = this.shadow.querySelector('.cerrar-registros')
+    const btnNuevoChat = this.shadow.querySelector('.nuevo-chat')
     const desplegable = this.shadow.querySelector('.desplegable')
+
+    btnNuevoChat.addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('new-conversation'))
+    })
 
     desplegable.addEventListener('click', event => {
       const chat = event.target.closest('.chat')
@@ -246,11 +234,6 @@ class Registros extends HTMLElement {
 
     document.addEventListener('conversations-updated', () => {
       this.loadData()
-    })
-
-    btnCerrarRegistros.addEventListener('click', () => {
-      this.classList.add('ocultar-registros')
-      document.dispatchEvent(new CustomEvent('registros-cerrados'))
     })
   }
 }
