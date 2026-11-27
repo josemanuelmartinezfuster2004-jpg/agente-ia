@@ -1,17 +1,72 @@
 const fs = require('fs/promises')
 const path = require('path')
-const { ObjectId } = require('mongodb')
 const MongodbService = require(`${global.__basedir}/src/services/mongodb-service`)
 const VectorService = require(`${global.__basedir}/src/services/vector-service`)
 const OpenAIService = require(`${global.__basedir}/src/services/openai-service`)
 const { answerGenerationSchema } = require(`${global.__basedir}/src/ia/schemas`)
 const { answerGenerationWithPdfsInstructions } = require(`${global.__basedir}/src/ia/instructions`)
 
+async function saveConversationMessage(conversationId, message) {
+  const mongodbService = new MongodbService({
+    uri: process.env.MONGODB_URI,
+    dbName: process.env.MONGODB_WEB_DB || process.env.MONGODB_DB
+  })
+
+  try {
+    const now = new Date()
+
+    if (conversationId) {
+      const mongoConversationId = mongodbService.createId(conversationId)
+
+      const updateResult = await mongodbService.updateOne(
+        'conversations',
+        { _id: mongoConversationId },
+        {
+          $push: {
+            messages: message
+          },
+          $set: {
+            updatedAt: now
+          }
+        }
+      )
+
+      if (!updateResult.matchedCount) {
+        throw new Error('No se ha encontrado la conversación en MongoDB.')
+      }
+
+      return mongoConversationId.toString()
+    }
+
+    const conversation = await mongodbService.insertOne(
+      'conversations',
+      {
+        messages: [message],
+        createdAt: now,
+        updatedAt: now
+      }
+    )
+
+    return conversation.insertedId.toString()
+  } finally {
+    await mongodbService.close().catch(error => {
+      console.warn('No se pudo cerrar MongoDB:', error.message)
+    })
+  }
+}
+
 exports.create = async (req, res, next) => {
   try {
     const userQuery = req.body.userQuery
-    const responseId = req.body.responseId
-    const conversationId = req.body.conversationId
+    const responseId = req.body.responseId || null
+    const conversationId = req.body.conversationId || null
+
+    if (typeof userQuery !== 'string' || !userQuery.trim()) {
+      res.status(400).send({
+        message: 'El mensaje no puede estar vacío.'
+      })
+      return
+    }
 
     const vectorService = new VectorService({
       clientOptions: {
@@ -65,10 +120,22 @@ exports.create = async (req, res, next) => {
         sources: []
       }
 
-      if (responseId) data.responseId = responseId
-      if (conversationId) data.conversationId = conversationId
+      const currentConversationId = await saveConversationMessage(
+        conversationId,
+        {
+          userQuery,
+          ...data,
+          responseId,
+          createdAt: new Date()
+        }
+      )
 
-      res.status(200).send(data)
+      res.status(200).send({
+        ...data,
+        ...(responseId && { responseId }),
+        conversationId: currentConversationId
+      })
+
       return
     }
 
@@ -147,72 +214,24 @@ exports.create = async (req, res, next) => {
       }
     })
 
-    let currentConversationId = conversationId || null
-    let mongodbService = null
+    const data = JSON.parse(response.output_text)
 
-    try {
-      mongodbService = new MongodbService({
-        uri: process.env.MONGODB_URI,
-        dbName: process.env.MONGODB_WEB_DB || process.env.MONGODB_DB
-      })
-
-      if (conversationId) {
-        const mongoConversationId = mongodbService.createId(conversationId)
-
-        const updateResult = await mongodbService.updateOne(
-          'conversations',
-          { _id: mongoConversationId },
-          {
-            $push: {
-              messages: { ...response, userQuery }
-            },
-            $set: { updatedAt: new Date() }
-          }
-        )
-
-        if (!updateResult.matchedCount) {
-          throw new Error('Conversation not found in MongoDB')
-        }
-
-        currentConversationId = mongoConversationId.toString()
-      } else {
-        const conversation = await mongodbService.insertOne(
-          'conversations',
-          {
-            messages: [{ ...response, userQuery }],
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        )
-
-        currentConversationId = conversation.insertedId.toString()
+    const currentConversationId = await saveConversationMessage(
+      conversationId,
+      {
+        userQuery,
+        ...data,
+        responseId: response.id,
+        createdAt: new Date()
       }
-    } catch (mongoError) {
-      console.warn(
-        'No se pudo guardar la conversación en MongoDB:',
-        mongoError.message
-      )
-
-      if (!currentConversationId) {
-        currentConversationId = new ObjectId().toString()
-      }
-    } finally {
-      if (mongodbService) {
-        await mongodbService.close().catch(closeError => {
-          console.warn(
-            'No se pudo cerrar MongoDB:',
-            closeError.message
-          )
-        })
-      }
-    }
+    )
 
     res.status(200).send({
-      ...JSON.parse(response.output_text),
+      ...data,
       responseId: response.id,
       conversationId: currentConversationId
     })
-  } catch (err) {
-    next(err)
+  } catch (error) {
+    next(error)
   }
 }

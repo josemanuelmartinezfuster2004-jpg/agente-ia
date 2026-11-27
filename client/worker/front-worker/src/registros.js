@@ -3,29 +3,13 @@ class Registros extends HTMLElement {
     super()
     this.shadow = this.attachShadow({ mode: 'open' })
     this.data = []
+    this.selectedId = null
   }
 
   connectedCallback() {
-    this.loadData()
     this.render()
     this.eventos()
-  }
-
-  loadData() {
-    this.data = [
-      { name: 'Cositas', id: 1 },
-      { name: 'Chat 2', id: 2 },
-      { name: 'Chat 3', id: 3 },
-      { name: 'Chat 4', id: 4 },
-      { name: 'Chat 5', id: 5 },
-      { name: 'Chat 6', id: 6 },
-      { name: 'Chat 7', id: 7 },
-      { name: 'Chat 8', id: 8 },
-      { name: 'Chat 9', id: 9 },
-      { name: 'Chat 10', id: 10 },
-      { name: 'Chat 11', id: 11 },
-      { name: 'Chat 12', id: 12 }
-    ]
+    this.loadData()
   }
 
   render() {
@@ -91,16 +75,27 @@ class Registros extends HTMLElement {
           color: hsl(48, 100%, 98%);
           cursor: pointer;
           font-size: 1rem;
-          height: 3rem;
+          min-height: 3rem;
           overflow: hidden;
           padding: 0.7rem;
+          text-align: left;
+          text-overflow: ellipsis;
           transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+          white-space: nowrap;
+          width: 100%;
         }
 
-        .chat:hover {
+        .chat:hover,
+        .chat.activo {
           background-color: hsl(215, 85%, 25%);
           border-color: hsl(215, 100%, 80%);
           box-shadow: 0 0 0.5rem hsl(215, 100%, 65% / 0.3);
+        }
+
+        .sin-conversaciones {
+          color: hsl(215, 20%, 70%);
+          font-size: 0.9rem;
+          padding: 0.8rem;
         }
 
         .cerrar-registros {
@@ -158,7 +153,9 @@ class Registros extends HTMLElement {
             </div>
           </summary>
 
-          <div class="desplegable"></div>
+          <div class="desplegable">
+            <p class="sin-conversaciones">Cargando conversaciones...</p>
+          </div>
         </details>
 
         <div class="cerrar-registros">
@@ -166,22 +163,90 @@ class Registros extends HTMLElement {
         </div>
       </div>
     `
+  }
 
+  async loadData() {
     const desplegable = this.shadow.querySelector('.desplegable')
 
-    this.data.forEach(element => {
-      const chat = document.createElement('div')
-      chat.classList.add('chat')
-      desplegable.appendChild(chat)
+    try {
+      const result = await fetch('/api/worker/conversations')
+      const data = await result.json()
 
-      const p = document.createElement('p')
-      p.textContent = element.name
-      chat.appendChild(p)
+      if (!result.ok) {
+        throw new Error(data.message || 'No se pudieron cargar las conversaciones.')
+      }
+
+      this.data = data
+      this.renderConversations()
+    } catch (error) {
+      desplegable.innerHTML = ''
+
+      const mensaje = document.createElement('p')
+      mensaje.classList.add('sin-conversaciones')
+      mensaje.textContent = 'No se pudieron cargar las conversaciones.'
+
+      desplegable.appendChild(mensaje)
+      console.error(error)
+    }
+  }
+
+  renderConversations() {
+    const desplegable = this.shadow.querySelector('.desplegable')
+    desplegable.innerHTML = ''
+
+    if (!this.data.length) {
+      const mensaje = document.createElement('p')
+      mensaje.classList.add('sin-conversaciones')
+      mensaje.textContent = 'Todavía no hay conversaciones.'
+
+      desplegable.appendChild(mensaje)
+      return
+    }
+
+    this.data.forEach(conversation => {
+      const chat = document.createElement('button')
+
+      chat.type = 'button'
+      chat.classList.add('chat')
+      chat.dataset.id = conversation.conversationId
+      chat.textContent = conversation.title || 'Nueva conversación'
+      chat.title = chat.textContent
+
+      if (conversation.conversationId === this.selectedId) {
+        chat.classList.add('activo')
+      }
+
+      desplegable.appendChild(chat)
     })
   }
 
   eventos() {
     const btnCerrarRegistros = this.shadow.querySelector('.cerrar-registros')
+    const desplegable = this.shadow.querySelector('.desplegable')
+
+    desplegable.addEventListener('click', event => {
+      const chat = event.target.closest('.chat')
+
+      if (!chat) return
+
+      this.selectedId = chat.dataset.id
+      this.renderConversations()
+
+      document.dispatchEvent(new CustomEvent('conversation-selected', {
+        detail: {
+          conversationId: this.selectedId
+        }
+      }))
+    })
+
+    document.addEventListener('conversation-created', event => {
+      this.selectedId = event.detail.conversationId
+      this.loadData()
+    })
+
+    document.addEventListener('conversations-updated', () => {
+      this.loadData()
+    })
 
     btnCerrarRegistros.addEventListener('click', () => {
       this.classList.add('ocultar-registros')

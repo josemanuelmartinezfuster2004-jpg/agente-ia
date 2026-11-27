@@ -234,6 +234,81 @@ class ParteIa extends HTMLElement {
     return mensaje
   }
 
+  limpiarMensajes() {
+    this.shadow.querySelector('.mensajes').innerHTML = ''
+  }
+
+  async createConversation() {
+    const result = await fetch('/api/worker/conversations', {
+      method: 'POST'
+    })
+
+    const data = await result.json()
+
+    if (!result.ok) {
+      throw new Error(data.message || 'No se pudo crear la conversación.')
+    }
+
+    this.conversationId = data.conversationId
+    this.responseId = null
+
+    this.limpiarMensajes()
+
+    document.dispatchEvent(new CustomEvent('conversation-created', {
+      detail: {
+        conversationId: this.conversationId
+      }
+    }))
+
+    return data
+  }
+
+  async loadConversation(conversationId) {
+    this.conversationId = conversationId
+    this.responseId = null
+
+    this.limpiarMensajes()
+
+    const boton = this.shadow.querySelector('.send-button')
+    boton.disabled = false
+    boton.value = 'Enviar'
+
+    try {
+      const result = await fetch(
+        `/api/worker/conversations/${encodeURIComponent(conversationId)}`
+      )
+
+      const data = await result.json()
+
+      if (!result.ok) {
+        throw new Error(data.message || 'No se pudo abrir la conversación.')
+      }
+
+      if (this.conversationId !== conversationId) return
+
+      this.responseId = data.responseId || null
+
+      for (const message of data.messages || []) {
+        if (message.userQuery) {
+          this.agregarMensaje(message.userQuery, 'usuario')
+        }
+
+        if (message.answer) {
+          this.agregarMensaje(message.answer, 'ia')
+        }
+      }
+    } catch (error) {
+      if (this.conversationId === conversationId) {
+        this.agregarMensaje(
+          error.message || 'No se pudo cargar la conversación.',
+          'error'
+        )
+      }
+
+      console.error(error)
+    }
+  }
+
   eventos() {
     const form = this.shadow.querySelector('form')
     const input = this.shadow.querySelector('#name')
@@ -248,75 +323,111 @@ class ParteIa extends HTMLElement {
       botonMenuAbrir.classList.remove('visible')
     })
 
+    document.addEventListener('new-conversation', async () => {
+      try {
+        await this.createConversation()
+        input.focus()
+      } catch (error) {
+        this.agregarMensaje(
+          error.message || 'No se pudo crear la conversación.',
+          'error'
+        )
+        console.error(error)
+      }
+    })
+
+    document.addEventListener('conversation-selected', event => {
+      this.loadConversation(event.detail.conversationId)
+    })
+
     botonMenuAbrir.addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('menu-abierto'))
     })
 
-    form.addEventListener('submit', async (event) => {
+    form.addEventListener('submit', async event => {
       event.preventDefault()
 
       const userQuery = input.value.trim()
 
       if (!userQuery || boton.disabled) return
 
-      this.agregarMensaje(userQuery, 'usuario')
-      form.reset()
-
-      boton.disabled = true
-      boton.value = 'Enviando...'
-
-      const cargando = this.agregarMensaje('Pensando...', 'ia')
-
       try {
-        const result = await fetch('/api/worker/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            userQuery,
-            ...(this.responseId && {
-              responseId: this.responseId
-            }),
-            ...(this.conversationId && {
-              conversationId: this.conversationId
+        if (!this.conversationId) {
+          await this.createConversation()
+        }
+
+        const currentConversationId = this.conversationId
+
+        this.agregarMensaje(userQuery, 'usuario')
+        form.reset()
+
+        boton.disabled = true
+        boton.value = 'Enviando...'
+
+        const cargando = this.agregarMensaje('Pensando...', 'ia')
+
+        try {
+          const result = await fetch('/api/worker/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              userQuery,
+              ...(this.responseId && {
+                responseId: this.responseId
+              }),
+              conversationId: currentConversationId
             })
           })
-        })
 
-        const data = await result.json()
+          const data = await result.json()
 
-        if (!result.ok) {
-          throw new Error(data.message || 'Error al obtener la respuesta')
+          if (!result.ok) {
+            throw new Error(data.message || 'Error al obtener la respuesta.')
+          }
+
+          if (this.conversationId === currentConversationId) {
+            if (data.responseId) {
+              this.responseId = data.responseId
+            }
+
+            cargando.remove()
+
+            this.agregarMensaje(
+              data.answer || 'No se ha recibido ninguna respuesta.',
+              'ia'
+            )
+          } else {
+            cargando.remove()
+          }
+
+          document.dispatchEvent(new CustomEvent('conversations-updated'))
+        } catch (error) {
+          cargando.remove()
+
+          if (this.conversationId === currentConversationId) {
+            this.agregarMensaje(
+              error.message || 'No se pudo conectar con el servidor.',
+              'error'
+            )
+          }
+
+          console.error(error)
+        } finally {
+          if (this.conversationId === currentConversationId) {
+            boton.disabled = false
+            boton.value = 'Enviar'
+            input.focus()
+          }
         }
-
-        if (data.responseId) {
-          this.responseId = data.responseId
-        }
-
-        if (data.conversationId) {
-          this.conversationId = data.conversationId
-        }
-
-        cargando.remove()
-
-        this.agregarMensaje(
-          data.answer || 'No se ha recibido ninguna respuesta.',
-          'ia'
-        )
       } catch (error) {
-        cargando.remove()
-
         this.agregarMensaje(
-          error.message || 'No se pudo conectar con el servidor.',
+          error.message || 'No se pudo crear la conversación.',
           'error'
         )
 
         console.error(error)
-      } finally {
-        boton.disabled = false
-        boton.value = 'Enviar'
-        input.focus()
       }
     })
   }
