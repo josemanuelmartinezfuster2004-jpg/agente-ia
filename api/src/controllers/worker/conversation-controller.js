@@ -3,6 +3,40 @@ const { ObjectId } = require('mongodb')
 const MongodbService = require(`${global.__basedir}/src/services/mongodb-service`)
 const generateConversationSummary = require(`${global.__basedir}/src/services/conversation-summary-service`)
 
+exports.create = async (req, res, next) => {
+  const mongodbService = new MongodbService({
+    uri: process.env.MONGODB_URI,
+    dbName: process.env.MONGODB_WEB_DB || process.env.MONGODB_DB
+  })
+
+  try {
+    const now = new Date()
+
+    const conversation = await mongodbService.insertOne(
+      'conversations',
+      {
+        messages: [],
+        createdAt: now,
+        updatedAt: now
+      }
+    )
+
+    res.status(201).send({
+      conversationId: conversation.insertedId.toString(),
+      title: 'Nueva conversación',
+      messageCount: 0,
+      createdAt: now,
+      updatedAt: now
+    })
+  } catch (error) {
+    next(error)
+  } finally {
+    await mongodbService.close().catch(error => {
+      console.warn('No se pudo cerrar MongoDB:', error.message)
+    })
+  }
+}
+
 exports.findAll = async (req, res, next) => {
   const mongodbService = new MongodbService({
     uri: process.env.MONGODB_URI,
