@@ -1,3 +1,4 @@
+
 const { ObjectId } = require('mongodb')
 const MongodbService = require(`${global.__basedir}/src/services/mongodb-service`)
 
@@ -8,12 +9,54 @@ function createMongodbService() {
   })
 }
 
+function normalizeWord(word) {
+  return word
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
 function getTitle(messages = []) {
   const firstMessage = messages.find(message => message.userQuery)
 
   if (!firstMessage) return 'Nueva conversación'
 
-  return firstMessage.userQuery.trim().slice(0, 60) || 'Nueva conversación'
+  const ignoredWords = new Set([
+    'a', 'al', 'algo', 'algunos', 'algunas',
+    'como', 'con', 'cual', 'cuales',
+    'de', 'del', 'desde',
+    'dime', 'dime', 'donde',
+    'el', 'ella', 'ellas', 'ellos', 'en', 'entre', 'es', 'esa', 'ese', 'eso', 'esta', 'este', 'esto',
+    'favor', 'hay',
+    'la', 'las', 'le', 'les', 'lo', 'los',
+    'me', 'mi', 'mis', 'mucho', 'muchos',
+    'necesito',
+    'para', 'pero', 'por', 'puedes', 'podrias',
+    'que', 'quiero', 'quisiera',
+    'se', 'si', 'sobre', 'su', 'sus',
+    'te', 'tengo', 'tu', 'tus',
+    'un', 'una', 'unas', 'unos',
+    'y', 'ya',
+    'busca', 'buscar', 'buscame',
+    'explica', 'explicame',
+    'dame', 'hazme', 'muestrame'
+  ])
+
+  const words = firstMessage.userQuery.match(/[\p{L}\p{N}]+/gu) || []
+
+  const relevantWords = words
+    .filter(word => !ignoredWords.has(normalizeWord(word)))
+    .slice(0, 6)
+
+  const titleWords = relevantWords.length
+    ? relevantWords
+    : words.slice(0, 6)
+
+  if (!titleWords.length) return 'Nueva conversación'
+
+  return titleWords
+    .map(word => word.toLocaleLowerCase('es'))
+    .join(' ')
 }
 
 function parseMessage(message) {
