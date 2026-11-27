@@ -1,3 +1,4 @@
+
 const fs = require('fs/promises')
 const path = require('path')
 const MongodbService = require(`${global.__basedir}/src/services/mongodb-service`)
@@ -5,6 +6,34 @@ const VectorService = require(`${global.__basedir}/src/services/vector-service`)
 const OpenAIService = require(`${global.__basedir}/src/services/openai-service`)
 const { answerGenerationSchema } = require(`${global.__basedir}/src/ia/schemas`)
 const { answerGenerationWithPdfsInstructions } = require(`${global.__basedir}/src/ia/instructions`)
+
+const conversationSummarySchema = {
+  type: 'object',
+  properties: {
+    summary: {
+      type: 'string',
+      description: 'Create a concise conversation title of 3 to 5 words. Use the same language as the user. Describe the main topic or intent, not the answer. Do not include introductory phrases.'
+    }
+  },
+  required: ['summary'],
+  additionalProperties: false
+}
+
+const conversationSummaryInstructions = `
+You generate short, descriptive titles for conversations.
+
+Read the user's original message and identify its main topic or intent.
+
+Rules:
+- Write a title containing between 3 and 5 words.
+- Use the same language as the user's message.
+- Capture the actual topic or request.
+- Do not summarize an answer.
+- Do not include introductory phrases.
+- Do not use generic titles such as "Nueva conversación".
+- Do not remove meaningful words just because they are verbs or prepositions.
+- Return only the JSON required by the supplied schema.
+`
 
 exports.create = async (req, res, next) => {
   try {
@@ -63,123 +92,153 @@ exports.create = async (req, res, next) => {
     }
 
     const candidates = [...candidatesByPath.values()]
+    let data
+    let currentResponseId = responseId
 
     if (!candidates.length) {
-      const data = {
+      data = {
         answer: 'No he encontrado documentos que contengan información para responder a tu pregunta.',
         status: 'insufficient_information',
         sources: []
       }
 
-      const currentConversationId = await saveConversationMessage(
-        conversationId,
-        {
-          userQuery,
-          ...data,
-          responseId,
-          createdAt: new Date()
-        }
+      if (!conversationId) {
+        const openAIService = new OpenAIService()
+
+        const summaryResponse = await openAIService.createResponse({
+          input: [{
+            role: 'user',
+            content: [{
+              type: 'input_text',
+              text: userQuery
+            }]
+          }],
+          model: 'gpt-6-luna',
+          options: {
+            reasoning: {
+              effort: 'low'
+            },
+            store: false,
+            instructions: conversationSummaryInstructions,
+            text: {
+              format: {
+                type: 'json_schema',
+                name: 'conversation-summary',
+                strict: true,
+                schema: conversationSummarySchema
+              }
+            }
+          }
+        })
+
+        data.summary = JSON.parse(summaryResponse.output_text).summary
+      }
+    } else {
+      const stats = await Promise.all(
+        candidates.map(candidate => fs.stat(candidate.filepath))
       )
 
-      res.status(200).send({
-        ...data,
-        ...(responseId && { responseId }),
-        conversationId: currentConversationId
-      })
+      const maxBytes = 50_000_000
+      const totalBytes = stats.reduce((sum, stat) => sum + stat.size, 0)
 
-      return
-    }
+      if (
+        stats.some(stat => stat.size >= maxBytes) ||
+        totalBytes >= maxBytes
+      ) {
+        throw new Error(
+          'Los PDF candidatos superan el límite de archivos de una petición. ' +
+          'Es necesario procesarlos en grupos.'
+        )
+      }
 
-    const stats = await Promise.all(
-      candidates.map(candidate => fs.stat(candidate.filepath))
-    )
+      const attachments = await Promise.all(
+        candidates.map(async candidate => {
+          const buffer = await fs.readFile(candidate.filepath)
 
-    const maxBytes = 50_000_000
-    const totalBytes = stats.reduce((sum, stat) => sum + stat.size, 0)
-
-    if (
-      stats.some(stat => stat.size >= maxBytes) ||
-      totalBytes >= maxBytes
-    ) {
-      throw new Error(
-        'Los PDF candidatos superan el límite de archivos de una petición. ' +
-        'Es necesario procesarlos en grupos.'
+          return {
+            type: 'input_file',
+            filename: `${candidate.id}-${candidate.filename}`,
+            file_data: `data:application/pdf;base64,${buffer.toString('base64')}`
+          }
+        })
       )
-    }
 
-    const attachments = await Promise.all(
-      candidates.map(async candidate => {
-        const buffer = await fs.readFile(candidate.filepath)
+      const input = [{
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: JSON.stringify({
+              question: userQuery,
+              candidates: candidates.map(candidate => ({
+                id: candidate.id,
+                filename: candidate.filename,
+                attachment: `${candidate.id}-${candidate.filename}`,
+                matches: candidate.matches
+              }))
+            })
+          },
+          ...attachments
+        ]
+      }]
 
-        return {
-          type: 'input_file',
-          filename: `${candidate.id}-${candidate.filename}`,
-          file_data: `data:application/pdf;base64,${buffer.toString('base64')}`
-        }
-      })
-    )
+      const openAIService = new OpenAIService()
 
-    const input = [{
-      role: 'user',
-      content: [
-        {
-          type: 'input_text',
-          text: JSON.stringify({
-            question: userQuery,
-            candidates: candidates.map(candidate => ({
-              id: candidate.id,
-              filename: candidate.filename,
-              attachment: `${candidate.id}-${candidate.filename}`,
-              matches: candidate.matches
-            }))
-          })
-        },
-        ...attachments
-      ]
-    }]
+      if (responseId) {
+        openAIService.setResponseId(responseId)
+      }
 
-    const openAIService = new OpenAIService()
+      const response = await openAIService.createResponse({
+        input,
+        model: 'gpt-6-luna',
+        options: {
+          reasoning: {
+            effort: 'low'
+          },
+          store: true,
+          instructions: `${answerGenerationWithPdfsInstructions}
 
-    if (responseId) {
-      openAIService.setResponseId(responseId)
-    }
+Additionally, generate a conversation summary:
+- Between 3 and 5 words.
+- In the same language as the user's question.
+- Describe the main topic or intent of the question.
+- Do not summarize your answer.
 
-    const response = await openAIService.createResponse({
-      input,
-      model: 'gpt-6-luna',
-      options: {
-        reasoning: {
-          effort: 'low'
-        },
-        store: true,
-        instructions: answerGenerationWithPdfsInstructions,
-        prompt_cache_key: 'answer-generation-v1',
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'answer-generation',
-            strict: true,
-            schema: answerGenerationSchema
+Include the summary field required by the JSON schema.`,
+          prompt_cache_key: 'answer-generation-v1',
+          text: {
+            format: {
+              type: 'json_schema',
+              name: 'answer-generation',
+              strict: true,
+              schema: answerGenerationSchema
+            }
           }
         }
-      }
-    })
+      })
 
-    const data = JSON.parse(response.output_text)
+      data = JSON.parse(response.output_text)
+      currentResponseId = response.id
+    }
+
+    const summary = data.summary || null
+    const { summary: ignoredSummary, ...messageData } = data
 
     const currentConversationId = await saveConversationMessage(
       conversationId,
+      summary,
       {
         userQuery,
-        ...data,
-        responseId: response.id,
+        ...messageData,
+        responseId: currentResponseId,
         createdAt: new Date()
       }
     )
 
     res.status(200).send({
-      ...data,
-      responseId: response.id,
+      ...messageData,
+      ...(summary && { summary }),
+      ...(currentResponseId && { responseId: currentResponseId }),
       conversationId: currentConversationId
     })
   } catch (error) {
@@ -187,7 +246,7 @@ exports.create = async (req, res, next) => {
   }
 }
 
-async function saveConversationMessage(conversationId, message) {
+async function saveConversationMessage(conversationId, summary, message) {
   const mongodbService = new MongodbService({
     uri: process.env.MONGODB_URI,
     dbName: process.env.MONGODB_WEB_DB || process.env.MONGODB_DB
@@ -219,10 +278,14 @@ async function saveConversationMessage(conversationId, message) {
       return mongoConversationId.toString()
     }
 
+    if (!summary) {
+      throw new Error('OpenAI no ha generado el título de la conversación.')
+    }
+
     const conversation = await mongodbService.insertOne(
       'conversations',
       {
-        summary: 
+        summary,
         messages: [message],
         createdAt: now,
         updatedAt: now

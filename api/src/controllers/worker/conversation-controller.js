@@ -3,7 +3,6 @@ const { ObjectId } = require('mongodb')
 const MongodbService = require(`${global.__basedir}/src/services/mongodb-service`)
 
 exports.findAll = async (req, res, next) => {
-
   const mongodbService = new MongodbService({
     uri: process.env.MONGODB_URI,
     dbName: process.env.MONGODB_WEB_DB || process.env.MONGODB_DB
@@ -21,7 +20,7 @@ exports.findAll = async (req, res, next) => {
       })
       .map(conversation => ({
         conversationId: conversation._id.toString(),
-        title: getTitle(conversation.messages),
+        title: conversation.summary || 'Nueva conversación',
         messageCount: conversation.messages?.length || 0,
         createdAt: conversation.createdAt || null,
         updatedAt: conversation.updatedAt || conversation.createdAt || null
@@ -38,7 +37,6 @@ exports.findAll = async (req, res, next) => {
 }
 
 exports.findById = async (req, res, next) => {
-
   const mongodbService = new MongodbService({
     uri: process.env.MONGODB_URI,
     dbName: process.env.MONGODB_WEB_DB || process.env.MONGODB_DB
@@ -70,7 +68,7 @@ exports.findById = async (req, res, next) => {
 
     res.status(200).send({
       conversationId: conversation._id.toString(),
-      title: getTitle(conversation.messages),
+      title: conversation.summary || 'Nueva conversación',
       responseId: getLastResponseId(conversation.messages),
       createdAt: conversation.createdAt || null,
       updatedAt: conversation.updatedAt || conversation.createdAt || null,
